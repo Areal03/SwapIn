@@ -2,9 +2,17 @@
   "name": "swapin-agent",
   "version": "0.1.0",
   "description": "Swap.In intent execution agent on Hedera",
+  "homepage": "https://swap-in.vercel.app/",
+  "repository": "https://github.com/Areal03/SwapIn",
   "keywords": [
     "skills",
     "registry-broker",
-    "hol"
+    "hol",
+    "hedera",
+    "ai-agent",
+    "intent",
+    "defi",
+    "swap",
+    "snipe"
   ]
 }
