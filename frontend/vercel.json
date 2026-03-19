@@ -1,7 +1,6 @@
 {
   "crons": [
-    { "path": "/api/check-deposits", "schedule": "* * * * *" },
-    { "path": "/api/process-orders", "schedule": "* * * * *" }
+    { "path": "/api/check-deposits", "schedule": "0 0 * * *" },
+    { "path": "/api/process-orders", "schedule": "0 0 * * *" }
   ]
 }
-
