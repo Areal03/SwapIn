@@ -1,5 +1,6 @@
 import { DbOrder } from "./types";
 import { isSimulation, sleep } from "./hedera";
+import { executeSwap } from "./swap";
 
 export const executeSnipe = async (order: DbOrder) => {
   if (isSimulation()) {
@@ -9,5 +10,8 @@ export const executeSnipe = async (order: DbOrder) => {
     return { txHash: `sim_snipe_${order.deposit_memo}_${Date.now()}` };
   }
 
-  throw new Error("executeSnipe live mode not implemented");
+  const waitMs = Number(process.env.SNIPE_MAX_WAIT_MS ?? 60_000);
+  const jitter = 2000 + Math.floor(Math.random() * 4000);
+  await sleep(Math.min(waitMs, 10_000 + jitter));
+  return executeSwap(order);
 };
