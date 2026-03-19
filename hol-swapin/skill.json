@@ -4,6 +4,7 @@
   "description": "Swap.In intent execution agent on Hedera",
   "homepage": "https://swap-in.vercel.app/",
   "repository": "https://github.com/Areal03/SwapIn",
+  "license": "MIT",
   "keywords": [
     "skills",
     "registry-broker",
