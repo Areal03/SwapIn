@@ -83,7 +83,8 @@ const resolveTokenOut = async (tokenTarget: string, amountInTinybar: string) => 
     const candidates = (tokensJson.tokens ?? []).map((t) => t.token_id).filter(Boolean).slice(0, 15);
     if (candidates.length === 0) throw new Error("USDC not found on mirror node");
 
-    const whbarEvm = `0x${ContractId.fromString(network === "mainnet" ? "0.0.1456985" : "0.0.15057").toSolidityAddress()}`;
+  const whbarTokenId = network === "mainnet" ? "0.0.1456986" : "0.0.15058";
+  const whbarEvm = `0x${TokenId.fromString(whbarTokenId).toSolidityAddress()}`;
     const quoterId = network === "mainnet" ? "0.0.3949424" : "0.0.1390002";
     const quoterEvm = `0x${ContractId.fromString(quoterId).toSolidityAddress()}`;
     const iface = new Interface([
@@ -145,8 +146,8 @@ export const executeSwap = async (order: DbOrder) => {
   const routerContractId = mustGetEnv("DEX_ROUTER_ADDRESS");
   const routerId = ContractId.fromString(routerContractId);
 
-  const whbarContractId = network === "mainnet" ? "0.0.1456985" : "0.0.15057";
-  const whbarEvm = `0x${ContractId.fromString(whbarContractId).toSolidityAddress()}`;
+  const whbarTokenId = network === "mainnet" ? "0.0.1456986" : "0.0.15058";
+  const whbarEvm = `0x${TokenId.fromString(whbarTokenId).toSolidityAddress()}`;
 
   const amountInTinybar = parseHbarToTinybar(order.amount_hbar);
   const out = await resolveTokenOut(order.token_target, amountInTinybar);
