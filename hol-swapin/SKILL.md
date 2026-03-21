@@ -12,8 +12,7 @@ An intent-based execution agent on Hedera. Users submit a goal (Swap or Snipe), 
 ## Live demo
 
 - App: https://swap-in.vercel.app/
-- Deposit tx example: https://hashscan.io/testnet/transaction/0.0.7222371-1773935321-990929149
-- Refund tx example: https://hashscan.io/testnet/transaction/0.0.7222371%401773935372.104276698
+- Transactions: submit an intent and follow the live console. Deposit/execution/refund hashes are linked to HashScan.
 
 ## Capabilities
 
