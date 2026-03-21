@@ -60,6 +60,7 @@ const statusToMessage = (status: OrderStatus, mode: OrderMode) => {
 };
 
 export default function Home() {
+  const [network, setNetwork] = useState<"testnet" | "mainnet">("testnet");
   const [mode, setMode] = useState<OrderMode>("swap");
   const [amountHbar, setAmountHbar] = useState("10");
   const [userWallet, setUserWallet] = useState("");
@@ -483,6 +484,26 @@ export default function Home() {
           <div className="rounded border border-green-800/60 bg-green-950/10 p-4">
             <div className="mb-3 text-sm text-green-300/80">Intent Input</div>
 
+            <label className="mb-2 block text-xs text-green-300/80">Network</label>
+            <div className="mb-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setNetwork("testnet")}
+                className={`rounded border px-3 py-2 text-sm ${
+                  network === "testnet" ? "border-green-500 bg-green-900/30 text-green-100" : "border-green-800/60"
+                }`}
+              >
+                Testnet
+              </button>
+              <button
+                type="button"
+                disabled
+                className="rounded border border-green-800/40 px-3 py-2 text-sm text-green-300/60"
+              >
+                Mainnet (Soon)
+              </button>
+            </div>
+
             <label className="mb-2 block text-xs text-green-300/80">Mode</label>
             <div className="mb-4 flex gap-2">
               <button
@@ -574,6 +595,11 @@ export default function Home() {
             >
               Submit Intent
             </button>
+
+            <div className="mt-2 text-xs text-green-300/70">
+              Make sure your receiver wallet has already associated the output token (for example SAUCE Token ID 0.0.1183558 on testnet),
+              otherwise the swap can revert and be refunded.
+            </div>
 
             {order && deposit ? (
               <div className="mt-4 rounded border border-green-800/60 bg-black/40 p-3 text-sm">
