@@ -53,10 +53,23 @@ const exec = async (input: { functionName: string; params: ContractFunctionParam
   const tx = new ContractExecuteTransaction().setContractId(getVaultContractId()).setGas(input.gas ?? 350_000).setFunction(input.functionName, input.params);
   if (input.payableHbar) tx.setPayableAmount(Hbar.fromString(input.payableHbar));
   const res = await tx.execute(client);
-  const receipt = await res.getReceipt(client);
-  const status = receipt.status.toString();
-  if (status !== "SUCCESS") throw new Error(`Contract call failed (${input.functionName}): ${status}`);
-  return { txHash: res.transactionId.toString() };
+  const txId = res.transactionId.toString();
+  try {
+    const receipt = await res.getReceipt(client);
+    const status = receipt.status.toString();
+    if (status !== "SUCCESS") throw new Error(`Contract call failed (${input.functionName}): ${status} tx=${txId}`);
+    return { txHash: txId };
+  } catch (e) {
+    let reason = "";
+    try {
+      const record = await res.getRecord(client);
+      reason = record.contractFunctionResult?.errorMessage ?? "";
+    } catch {
+      reason = "";
+    }
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(`Contract call failed (${input.functionName}): ${msg}${reason ? ` (${reason})` : ""} tx=${txId}`);
+  }
 };
 
 export const vaultRegisterOrder = async (order: DbOrder) => {
@@ -73,7 +86,7 @@ export const vaultRegisterOrder = async (order: DbOrder) => {
     .addAddress(tokenOut)
     .addUint8(mode);
 
-  return exec({ functionName: "registerOrder", params, gas: 450_000 });
+  return exec({ functionName: "registerOrder", params, gas: 700_000 });
 };
 
 export const vaultWithdrawForExecution = async (order: DbOrder) => {
@@ -86,7 +99,7 @@ export const vaultWithdrawForExecution = async (order: DbOrder) => {
     .addAddress(to)
     .addUint256(new BigNumber(amountTinybar));
 
-  return exec({ functionName: "withdrawForExecution", params, gas: 450_000 });
+  return exec({ functionName: "withdrawForExecution", params, gas: 700_000 });
 };
 
 export const vaultMarkCompleted = async (order: DbOrder) => {

@@ -31,14 +31,36 @@ export const GET = async () => {
 
     try {
       if (isVaultContractMode()) {
-        await vaultRegisterOrder(raw);
-        await vaultWithdrawForExecution(raw);
+        try {
+          await vaultRegisterOrder(raw);
+        } catch (e) {
+          const m = e instanceof Error ? e.message : String(e);
+          throw new Error(`vault.registerOrder failed: ${m}`);
+        }
+
+        try {
+          await vaultWithdrawForExecution(raw);
+        } catch (e) {
+          const m = e instanceof Error ? e.message : String(e);
+          throw new Error(`vault.withdrawForExecution failed: ${m}`);
+        }
       }
 
-      const execRes = raw.mode === "swap" ? await executeSwap(raw) : await executeSnipe(raw);
+      let execRes: { txHash: string };
+      try {
+        execRes = raw.mode === "swap" ? await executeSwap(raw) : await executeSnipe(raw);
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        throw new Error(`execution failed: ${m}`);
+      }
 
       if (isVaultContractMode()) {
-        await vaultMarkCompleted(raw);
+        try {
+          await vaultMarkCompleted(raw);
+        } catch (e) {
+          const m = e instanceof Error ? e.message : String(e);
+          throw new Error(`vault.markCompleted failed: ${m}`);
+        }
       }
 
       const { error: doneErr } = await supabase

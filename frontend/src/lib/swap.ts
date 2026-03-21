@@ -227,14 +227,17 @@ export const executeSwap = async (order: DbOrder) => {
   const tx = new ContractExecuteTransaction()
     .setPayableAmount(Hbar.fromTinybars(amountInTinybar))
     .setContractId(routerId)
-    .setGas(Number(process.env.SWAP_GAS ?? 900_000))
+    .setGas(Number(process.env.SWAP_GAS ?? 1_600_000))
     .setFunctionParameters(multicallBytes);
 
   const response = await tx.execute(client);
   const txId = response.transactionId.toString();
-  const receipt = await response.getReceipt(client);
-  const status = receipt.status.toString();
-  if (status !== "SUCCESS") {
+  try {
+    const receipt = await response.getReceipt(client);
+    const status = receipt.status.toString();
+    if (status !== "SUCCESS") throw new Error(`SwapRouter failed: ${status} tx=${txId}`);
+    return { txHash: txId };
+  } catch (e) {
     let reason = "";
     try {
       const record = await response.getRecord(client);
@@ -242,8 +245,9 @@ export const executeSwap = async (order: DbOrder) => {
     } catch {
       reason = "";
     }
-    throw new Error(`SwapRouter failed: ${status}${reason ? ` (${reason})` : ""} tx=${txId}`);
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(
+      `SwapRouter failed: ${msg}${reason ? ` (${reason})` : ""} tx=${txId} recipient=${recipientEvm} fee=${fee} tokenOut=${out.tokenId ?? out.evm}`
+    );
   }
-
-  return { txHash: txId };
 };
