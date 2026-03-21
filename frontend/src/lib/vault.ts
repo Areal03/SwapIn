@@ -4,7 +4,8 @@ import {
   ContractExecuteTransaction,
   ContractFunctionParameters,
   ContractId,
-  Hbar
+  Hbar,
+  PrivateKey
 } from "@hashgraph/sdk";
 import { getHederaClient, isSimulation } from "./hedera";
 import type { DbOrder } from "./types";
@@ -42,7 +43,28 @@ const parseHbarToTinybar = (hbar: string | number) => {
   return tiny.toString();
 };
 
-const getOperatorEvmAddress = () => `0x${AccountId.fromString(mustGetEnv("HEDERA_ACCOUNT_ID")).toSolidityAddress()}`;
+const parseOperatorPrivateKey = (raw: string) => {
+  const key = raw.trim();
+  if (key.startsWith("0x")) return PrivateKey.fromStringECDSA(key.slice(2));
+  if (PrivateKey.isDerKey(key)) return PrivateKey.fromStringDer(key);
+  const algo = PrivateKey.getAlgorithm(key);
+  if (algo === "ecdsa") return PrivateKey.fromStringECDSA(key);
+  return PrivateKey.fromStringED25519(key);
+};
+
+const getOperatorEvmAddress = () => {
+  const override = (process.env.OPERATOR_EVM_ADDRESS ?? process.env.AGENT_ADDRESS ?? "").trim();
+  if (override.startsWith("0x") && override.length === 42) return override.toLowerCase();
+
+  const pkRaw = process.env.HEDERA_PRIVATE_KEY;
+  if (pkRaw) {
+    const pk = parseOperatorPrivateKey(pkRaw);
+    const evm = pk.publicKey.toEvmAddress();
+    return evm.startsWith("0x") ? evm.toLowerCase() : `0x${evm.toLowerCase()}`;
+  }
+
+  return `0x${AccountId.fromString(mustGetEnv("HEDERA_ACCOUNT_ID")).toSolidityAddress()}`;
+};
 
 const exec = async (input: { functionName: string; params: ContractFunctionParameters; gas?: number; payableHbar?: string }) => {
   if (isSimulation()) {
