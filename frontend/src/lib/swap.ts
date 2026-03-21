@@ -51,6 +51,28 @@ const toEvmAddress = async (wallet: string) => {
   return trimmed.toLowerCase();
 };
 
+const resolveAccountIdFromWallet = async (wallet: string) => {
+  const trimmed = wallet.trim();
+  if (trimmed.startsWith("0.0.")) return trimmed;
+  if (trimmed.startsWith("0x") && trimmed.length === 42) {
+    const mirrorUrl = (process.env.MIRROR_NODE_URL ?? "https://testnet.mirrornode.hedera.com/api/v1").replace(/\/$/, "");
+    const res = await fetch(`${mirrorUrl}/accounts/${trimmed.toLowerCase()}`, { headers: { accept: "application/json" } });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { account?: string };
+    return typeof json.account === "string" ? json.account : null;
+  }
+  return null;
+};
+
+const isAssociated = async (accountId: string, tokenId: string) => {
+  const mirrorUrl = (process.env.MIRROR_NODE_URL ?? "https://testnet.mirrornode.hedera.com/api/v1").replace(/\/$/, "");
+  const url = `${mirrorUrl}/accounts/${accountId}/tokens?token.id=${encodeURIComponent(tokenId)}&limit=1`;
+  const res = await fetch(url, { headers: { accept: "application/json" } });
+  if (!res.ok) return false;
+  const json = (await res.json()) as { tokens?: unknown[] };
+  return Array.isArray(json.tokens) && json.tokens.length > 0;
+};
+
 const toEvmAddressFromTokenId = (tokenId: string) => `0x${TokenId.fromString(tokenId).toSolidityAddress()}`;
 
 const parseHbarToTinybar = (hbar: string | number) => {
@@ -278,5 +300,23 @@ export const executeSwap = async (order: DbOrder) => {
     throw new Error(
       `SwapRouter failed: ${msg}${reason ? ` (${reason})` : ""} tx=${txId} recipient=${recipientEvm} fee=${fee} tokenOut=${out.tokenId ?? out.evm}`
     );
+  }
+};
+
+export const preflightSwap = async (order: DbOrder) => {
+  if (isSimulation()) return;
+  const amountInTinybar = parseHbarToTinybar(order.amount_hbar);
+  const out = await resolveTokenOut(order.token_target, amountInTinybar);
+  if (!out.tokenId) return;
+
+  const accountId = await resolveAccountIdFromWallet(order.user_wallet);
+  if (!accountId) return;
+
+  const operatorId = (process.env.HEDERA_ACCOUNT_ID ?? "").trim();
+  if (operatorId && accountId === operatorId) return;
+
+  const ok = await isAssociated(accountId, out.tokenId);
+  if (!ok) {
+    throw new Error(`Receiver ${accountId} is not associated with token ${out.tokenId}. Associate the token first, then retry.`);
   }
 };

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "../../../db/supabaseAdmin";
 import { refundHbar } from "../../../lib/hedera";
-import { executeSwap } from "../../../lib/swap";
+import { executeSwap, preflightSwap } from "../../../lib/swap";
 import { executeSnipe } from "../../../lib/snipe";
 import { DbOrder } from "../../../lib/types";
 import { isVaultContractMode, vaultMarkCompleted, vaultMarkRefunded, vaultRefundRemaining, vaultRegisterOrder, vaultWithdrawForExecution } from "../../../lib/vault";
@@ -39,6 +39,13 @@ export const GET = async () => {
         }
 
         try {
+          await preflightSwap(raw);
+        } catch (e) {
+          const m = e instanceof Error ? e.message : String(e);
+          throw new Error(`preflight failed: ${m}`);
+        }
+
+        try {
           await vaultWithdrawForExecution(raw);
         } catch (e) {
           const m = e instanceof Error ? e.message : String(e);
@@ -48,6 +55,9 @@ export const GET = async () => {
 
       let execRes: { txHash: string };
       try {
+        if (!isVaultContractMode()) {
+          await preflightSwap(raw);
+        }
         execRes = raw.mode === "swap" ? await executeSwap(raw) : await executeSnipe(raw);
       } catch (e) {
         const m = e instanceof Error ? e.message : String(e);
@@ -74,19 +84,26 @@ export const GET = async () => {
       const msg = e instanceof Error ? e.message : String(e);
 
       try {
+        let onchainRefundTx: string | null = null;
         if (isVaultContractMode()) {
           try {
-            await vaultRefundRemaining(raw);
+            const r = await vaultRefundRemaining(raw);
+            onchainRefundTx = r.txHash;
           } catch {
             await vaultMarkRefunded(raw);
           }
         }
-        const refundRes = await refundHbar({ userWallet: raw.user_wallet, amountHbar: raw.amount_hbar });
-        await supabase
-          .from("orders")
-          .update({ status: "refunded", tx_hash: refundRes.txHash })
-          .eq("id", raw.id);
-        processed.push({ id: raw.id, status: "refunded", tx_hash: refundRes.txHash, error: msg });
+        if (onchainRefundTx) {
+          await supabase.from("orders").update({ status: "refunded", tx_hash: onchainRefundTx }).eq("id", raw.id);
+          processed.push({ id: raw.id, status: "refunded", tx_hash: onchainRefundTx, error: msg });
+        } else {
+          const refundRes = await refundHbar({ userWallet: raw.user_wallet, amountHbar: raw.amount_hbar });
+          await supabase
+            .from("orders")
+            .update({ status: "refunded", tx_hash: refundRes.txHash })
+            .eq("id", raw.id);
+          processed.push({ id: raw.id, status: "refunded", tx_hash: refundRes.txHash, error: msg });
+        }
       } catch (refundErr) {
         const refundMsg = refundErr instanceof Error ? refundErr.message : String(refundErr);
         await supabase
