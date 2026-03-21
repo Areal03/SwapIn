@@ -24,13 +24,22 @@ const main = async () => {
   const { ethers } = await hre.network.connect();
   const pk = process.env.HEDERA_PRIVATE_KEY ?? process.env.EVM_PRIVATE_KEY ?? "";
   const [defaultSigner] = await ethers.getSigners();
-  const deployer = pk ? new ethers.Wallet(pk, ethers.provider) : defaultSigner;
+  const provider = ethers.provider;
+  const deployer = pk ? new ethers.Wallet(pk, provider) : defaultSigner;
   if (!deployer) throw new Error("No deployer signer available. Set HEDERA_PRIVATE_KEY (0x...)");
 
   const agent = process.env.AGENT_ADDRESS ?? deployer.address;
 
+  let gasPrice;
+  try {
+    gasPrice = await provider.getGasPrice();
+  } catch {
+    const hex = await provider.send("eth_gasPrice", []);
+    gasPrice = BigInt(hex);
+  }
+
   const Vault = await ethers.getContractFactory("HederaIntentVault", deployer);
-  const vault = await Vault.deploy(agent);
+  const vault = await Vault.deploy(agent, { gasLimit: 3_000_000, gasPrice });
   await vault.waitForDeployment();
 
   const evm = await vault.getAddress();
