@@ -65,51 +65,83 @@ const mirrorContractCall = async (input: { mirrorUrl: string; toEvmAddress: stri
   return json.result;
 };
 
+const quoteExactInput = async (input: {
+  mirrorUrl: string;
+  quoterEvm: string;
+  whbarEvm: string;
+  tokenOutEvm: string;
+  fee: number;
+  amountInTinybar: string;
+}) => {
+  const iface = new Interface([
+    "function quoteExactInput(bytes path,uint256 amountIn) returns (uint256 amountOut,uint160[] sqrtPriceX96AfterList,uint32[] initializedTicksCrossedList,uint256 gasEstimate)"
+  ]);
+  const path = buildPath(input.whbarEvm, input.fee, input.tokenOutEvm);
+  const data = iface.encodeFunctionData("quoteExactInput", [path, input.amountInTinybar]);
+  const rawResult = await mirrorContractCall({ mirrorUrl: input.mirrorUrl, toEvmAddress: input.quoterEvm, data });
+  const decoded = iface.decodeFunctionResult("quoteExactInput", rawResult) as unknown as { amountOut: bigint };
+  const out = decoded.amountOut;
+  return { amountOut: out ?? BigInt("0"), path };
+};
+
 const resolveTokenOut = async (tokenTarget: string, amountInTinybar: string) => {
   const raw = tokenTarget.trim();
-  if (raw.startsWith("0x") && raw.length === 42) return { kind: "evm" as const, evm: raw.toLowerCase(), tokenId: null as string | null };
-  if (raw.startsWith("0.0.")) return { kind: "tokenId" as const, evm: toEvmAddressFromTokenId(raw), tokenId: raw };
+  if (raw.startsWith("0x") && raw.length === 42) return { kind: "evm" as const, evm: raw.toLowerCase(), tokenId: null as string | null, fee: null as number | null };
+  if (raw.startsWith("0.0.")) return { kind: "tokenId" as const, evm: toEvmAddressFromTokenId(raw), tokenId: raw, fee: null as number | null };
 
   const network = (process.env.HEDERA_NETWORK ?? "testnet").toLowerCase() === "mainnet" ? "mainnet" : "testnet";
+  const mirrorUrl = process.env.MIRROR_NODE_URL ?? "https://testnet.mirrornode.hedera.com/api/v1";
+  const mirrorBase = mirrorUrl.replace(/\/$/, "");
+  const quoterId = network === "mainnet" ? "0.0.3949424" : "0.0.1390002";
+  const quoterEvm = `0x${ContractId.fromString(quoterId).toSolidityAddress()}`;
+  const whbarTokenId = network === "mainnet" ? "0.0.1456986" : "0.0.15058";
+  const whbarEvm = `0x${TokenId.fromString(whbarTokenId).toSolidityAddress()}`;
+  const feeCandidates = [500, 3000, 10_000];
+
   if (raw.toUpperCase() === "SAUCE") {
     const tokenId = network === "mainnet" ? "0.0.731861" : "0.0.1183558";
-    return { kind: "tokenId" as const, evm: toEvmAddressFromTokenId(tokenId), tokenId };
+    const tokenEvm = toEvmAddressFromTokenId(tokenId);
+
+    let bestFee: number | null = null;
+    let bestOut = BigInt("0");
+    for (const fee of feeCandidates) {
+      try {
+        const q = await quoteExactInput({ mirrorUrl: mirrorBase, quoterEvm, whbarEvm, tokenOutEvm: tokenEvm, fee, amountInTinybar });
+        if (q.amountOut > bestOut) {
+          bestOut = q.amountOut;
+          bestFee = fee;
+        }
+      } catch {
+        continue;
+      }
+    }
+    if (!bestFee || bestOut <= BigInt("0")) throw new Error("No SAUCE route found");
+    return { kind: "tokenId" as const, evm: tokenEvm, tokenId, fee: bestFee };
   }
 
   if (raw.toUpperCase() === "USDC") {
-    const mirrorUrl = process.env.MIRROR_NODE_URL ?? "https://testnet.mirrornode.hedera.com/api/v1";
     const tokensRes = await fetch(`${mirrorUrl.replace(/\/$/, "")}/tokens?name=USDC&limit=25`, { headers: { accept: "application/json" } });
     const tokensJson = (await tokensRes.json()) as { tokens?: Array<{ token_id: string }> };
     const candidates = (tokensJson.tokens ?? []).map((t) => t.token_id).filter(Boolean).slice(0, 15);
     if (candidates.length === 0) throw new Error("USDC not found on mirror node");
 
-  const whbarTokenId = network === "mainnet" ? "0.0.1456986" : "0.0.15058";
-  const whbarEvm = `0x${TokenId.fromString(whbarTokenId).toSolidityAddress()}`;
-    const quoterId = network === "mainnet" ? "0.0.3949424" : "0.0.1390002";
-    const quoterEvm = `0x${ContractId.fromString(quoterId).toSolidityAddress()}`;
-    const iface = new Interface([
-      "function quoteExactInput(bytes path,uint256 amountIn) returns (uint256 amountOut,uint160[] sqrtPriceX96AfterList,uint32[] initializedTicksCrossedList,uint256 gasEstimate)"
-    ]);
-    const mirrorBase = mirrorUrl.replace(/\/$/, "");
-    const feeCandidates = [3000, 500, 10000];
-
+    let best: { tokenId: string; tokenEvm: string; fee: number; out: bigint } | null = null;
     for (const tokenId of candidates) {
       const tokenEvm = toEvmAddressFromTokenId(tokenId);
       for (const fee of feeCandidates) {
         try {
-          const path = buildPath(whbarEvm, fee, tokenEvm);
-          const data = iface.encodeFunctionData("quoteExactInput", [path, amountInTinybar]);
-          const rawResult = await mirrorContractCall({ mirrorUrl: mirrorBase, toEvmAddress: quoterEvm, data });
-          const decoded = iface.decodeFunctionResult("quoteExactInput", rawResult) as unknown as { amountOut: bigint };
-          const out = decoded.amountOut;
-          if (out && out > BigInt("0")) return { kind: "tokenId" as const, evm: tokenEvm, tokenId };
+          const q = await quoteExactInput({ mirrorUrl: mirrorBase, quoterEvm, whbarEvm, tokenOutEvm: tokenEvm, fee, amountInTinybar });
+          if (q.amountOut > BigInt("0") && (!best || q.amountOut > best.out)) {
+            best = { tokenId, tokenEvm, fee, out: q.amountOut };
+          }
         } catch {
           continue;
         }
       }
     }
 
-    throw new Error("No liquid USDC route found on testnet");
+    if (!best) throw new Error("No liquid USDC route found on testnet");
+    return { kind: "tokenId" as const, evm: best.tokenEvm, tokenId: best.tokenId, fee: best.fee };
   }
 
   throw new Error(`Unknown token_target: ${raw}`);
@@ -129,8 +161,10 @@ const ensureAssociatedIfOperatorRecipient = async (input: { recipient: string; t
       .freezeWith(client)
       .execute(client);
     await tx.getReceipt(client);
-  } catch {
-    return;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("TOKEN_ALREADY_ASSOCIATED_TO_ACCOUNT")) return;
+    throw new Error(`Token association failed (${input.tokenId}): ${msg}`);
   }
 };
 
@@ -157,7 +191,7 @@ export const executeSwap = async (order: DbOrder) => {
   const recipientEvm = toEvmAddress(order.user_wallet);
   const quoterContractId = network === "mainnet" ? "0.0.3949424" : "0.0.1390002";
   const quoterEvm = `0x${ContractId.fromString(quoterContractId).toSolidityAddress()}`;
-  const fee = Number(process.env.SWAP_FEE ?? 3000);
+  const fee = Number(process.env.SWAP_FEE ?? out.fee ?? 3000);
   const slippageBps = Number(process.env.SWAP_SLIPPAGE_BPS ?? 100);
   const deadline = Math.floor(Date.now() / 1000) + Number(process.env.SWAP_DEADLINE_SECONDS ?? 600);
 
@@ -190,13 +224,26 @@ export const executeSwap = async (order: DbOrder) => {
   const multicallBytes = hexToUint8Array(multicallEncoded);
 
   const client = getHederaClient();
-  const response = await new ContractExecuteTransaction()
+  const tx = new ContractExecuteTransaction()
     .setPayableAmount(Hbar.fromTinybars(amountInTinybar))
     .setContractId(routerId)
     .setGas(Number(process.env.SWAP_GAS ?? 900_000))
-    .setFunctionParameters(multicallBytes)
-    .execute(client);
+    .setFunctionParameters(multicallBytes);
 
-  const record = await response.getRecord(client);
-  return { txHash: record.transactionId.toString() };
+  const response = await tx.execute(client);
+  const txId = response.transactionId.toString();
+  const receipt = await response.getReceipt(client);
+  const status = receipt.status.toString();
+  if (status !== "SUCCESS") {
+    let reason = "";
+    try {
+      const record = await response.getRecord(client);
+      reason = record.contractFunctionResult?.errorMessage ?? "";
+    } catch {
+      reason = "";
+    }
+    throw new Error(`SwapRouter failed: ${status}${reason ? ` (${reason})` : ""} tx=${txId}`);
+  }
+
+  return { txHash: txId };
 };
