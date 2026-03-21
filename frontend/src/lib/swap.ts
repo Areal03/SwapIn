@@ -16,11 +16,39 @@ const mustGetEnv = (key: string) => {
   return v;
 };
 
-const toEvmAddress = (wallet: string) => {
+const toEvmAddressFromAccountId = (accountId: string) => `0x${AccountId.fromString(accountId).toSolidityAddress()}`;
+
+const accountEvmCache = new Map<string, string>();
+
+const resolveAccountEvmAddress = async (accountId: string) => {
+  const cached = accountEvmCache.get(accountId);
+  if (cached) return cached;
+
+  const mirrorUrl = (process.env.MIRROR_NODE_URL ?? "https://testnet.mirrornode.hedera.com/api/v1").replace(/\/$/, "");
+  try {
+    const res = await fetch(`${mirrorUrl}/accounts/${accountId}`, { headers: { accept: "application/json" } });
+    if (res.ok) {
+      const json = (await res.json()) as { evm_address?: string };
+      const evm = (json.evm_address ?? "").trim().toLowerCase();
+      if (evm.startsWith("0x") && evm.length === 42) {
+        accountEvmCache.set(accountId, evm);
+        return evm;
+      }
+    }
+  } catch {
+    //
+  }
+
+  const fallback = toEvmAddressFromAccountId(accountId).toLowerCase();
+  accountEvmCache.set(accountId, fallback);
+  return fallback;
+};
+
+const toEvmAddress = async (wallet: string) => {
   const trimmed = wallet.trim();
   if (trimmed.startsWith("0x") && trimmed.length === 42) return trimmed.toLowerCase();
-  if (trimmed.startsWith("0.0.")) return `0x${AccountId.fromString(trimmed).toSolidityAddress()}`;
-  return trimmed;
+  if (trimmed.startsWith("0.0.")) return resolveAccountEvmAddress(trimmed);
+  return trimmed.toLowerCase();
 };
 
 const toEvmAddressFromTokenId = (tokenId: string) => `0x${TokenId.fromString(tokenId).toSolidityAddress()}`;
@@ -188,10 +216,10 @@ export const executeSwap = async (order: DbOrder) => {
 
   await ensureAssociatedIfOperatorRecipient({ recipient: order.user_wallet, tokenId: out.tokenId });
 
-  const recipientEvm = toEvmAddress(order.user_wallet);
+  const recipientEvm = await toEvmAddress(order.user_wallet);
   const quoterContractId = network === "mainnet" ? "0.0.3949424" : "0.0.1390002";
   const quoterEvm = `0x${ContractId.fromString(quoterContractId).toSolidityAddress()}`;
-  const fee = Number(process.env.SWAP_FEE ?? out.fee ?? 3000);
+  const fee = Number(out.fee ?? process.env.SWAP_FEE ?? 3000);
   const slippageBps = Number(process.env.SWAP_SLIPPAGE_BPS ?? 100);
   const deadline = Math.floor(Date.now() / 1000) + Number(process.env.SWAP_DEADLINE_SECONDS ?? 600);
 
@@ -224,8 +252,9 @@ export const executeSwap = async (order: DbOrder) => {
   const multicallBytes = hexToUint8Array(multicallEncoded);
 
   const client = getHederaClient();
+  const payableTinybar = Number(amountInTinybar);
   const tx = new ContractExecuteTransaction()
-    .setPayableAmount(Hbar.fromTinybars(amountInTinybar))
+    .setPayableAmount(Hbar.fromTinybars(payableTinybar))
     .setContractId(routerId)
     .setGas(Number(process.env.SWAP_GAS ?? 1_600_000))
     .setFunctionParameters(multicallBytes);
