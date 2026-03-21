@@ -571,6 +571,81 @@ export default function Home() {
               </div>
             )}
 
+            {tokenPreset !== "CUSTOM" ? (
+              <div className="mb-4 rounded border border-green-800/40 bg-black/40 px-3 py-2 text-xs text-green-200">
+                <div className="text-green-300/80">Token Details</div>
+                {tokenPreset === "SAUCE" ? (
+                  <div className="mt-2 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="break-all">
+                        <span className="text-green-300/80">Token ID:</span>{" "}
+                        <span className="text-green-100">{network === "testnet" ? "0.0.1183558" : "0.0.731861"}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void copyToClipboard("token_id_sauce", network === "testnet" ? "0.0.1183558" : "0.0.731861")}
+                        className="shrink-0 rounded border border-green-800/60 bg-black px-2 py-1 text-[10px] text-green-200 hover:border-green-500"
+                      >
+                        {copied === "token_id_sauce" ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <a
+                        className="break-all underline decoration-green-700 underline-offset-2 hover:decoration-green-400"
+                        href={`https://hashscan.io/${network}/token/${network === "testnet" ? "0.0.1183558" : "0.0.731861"}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        HashScan token page
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void copyToClipboard(
+                            "token_link_sauce",
+                            `https://hashscan.io/${network}/token/${network === "testnet" ? "0.0.1183558" : "0.0.731861"}`
+                          )
+                        }
+                        className="shrink-0 rounded border border-green-800/60 bg-black px-2 py-1 text-[10px] text-green-200 hover:border-green-500"
+                      >
+                        {copied === "token_link_sauce" ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                    <div className="text-green-300/70">
+                      Make sure the receiver account has already associated SAUCE before swapping.
+                    </div>
+                  </div>
+                ) : null}
+                {tokenPreset === "USDC" ? (
+                  <div className="mt-2 space-y-2">
+                    <div className="text-green-300/70">
+                      USDC on testnet may have multiple issuers and token IDs. Use Custom and paste the exact Token ID (0.0.x) you
+                      want to swap into.
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <a
+                        className="break-all underline decoration-green-700 underline-offset-2 hover:decoration-green-400"
+                        href="https://testnet.mirrornode.hedera.com/api/v1/tokens?name=USDC&limit=25"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Mirror Node search: tokens?name=USDC
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void copyToClipboard("token_link_usdc", "https://testnet.mirrornode.hedera.com/api/v1/tokens?name=USDC&limit=25")
+                        }
+                        className="shrink-0 rounded border border-green-800/60 bg-black px-2 py-1 text-[10px] text-green-200 hover:border-green-500"
+                      >
+                        {copied === "token_link_usdc" ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
             <label className="mb-2 block text-xs text-green-300/80">Amount (HBAR)</label>
             <input
               value={amountHbar}
