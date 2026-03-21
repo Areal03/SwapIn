@@ -4,7 +4,7 @@ import { refundHbar } from "../../../lib/hedera";
 import { executeSwap } from "../../../lib/swap";
 import { executeSnipe } from "../../../lib/snipe";
 import { DbOrder } from "../../../lib/types";
-import { isVaultContractMode, vaultMarkCompleted, vaultMarkRefunded, vaultRegisterOrder, vaultWithdrawForExecution } from "../../../lib/vault";
+import { isVaultContractMode, vaultMarkCompleted, vaultMarkRefunded, vaultRefundRemaining, vaultRegisterOrder, vaultWithdrawForExecution } from "../../../lib/vault";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,7 +53,11 @@ export const GET = async () => {
 
       try {
         if (isVaultContractMode()) {
-          await vaultMarkRefunded(raw);
+          try {
+            await vaultRefundRemaining(raw);
+          } catch {
+            await vaultMarkRefunded(raw);
+          }
         }
         const refundRes = await refundHbar({ userWallet: raw.user_wallet, amountHbar: raw.amount_hbar });
         await supabase

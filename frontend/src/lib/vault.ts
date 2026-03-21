@@ -98,3 +98,8 @@ export const vaultMarkRefunded = async (order: DbOrder) => {
   const params = new ContractFunctionParameters().addBytes32(memoToBytes32(order.deposit_memo));
   return exec({ functionName: "markRefunded", params, gas: 200_000 });
 };
+
+export const vaultRefundRemaining = async (order: DbOrder) => {
+  const params = new ContractFunctionParameters().addBytes32(memoToBytes32(order.deposit_memo));
+  return exec({ functionName: "refundRemaining", params, gas: 300_000 });
+};
