@@ -44,7 +44,7 @@ Pitch deck must include:
 
 ## 4) Project Demo Video (≤ 5 minutes)
 
-- YouTube URL: (paste here)
+- YouTube URL: https://youtu.be/PqobcX9M0qc
 
 Recording checklist (suggested flow):
 
